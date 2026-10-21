@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { 
   Building2, Plus, Search, Mail, Phone, MapPin, 
-  X, Pencil, Trash2, Loader2, FileText 
+  X, Pencil, Trash2, Loader2, FileText, Upload, Calendar, AlertCircle, Download
 } from 'lucide-react';
 
 export default function Companies() {
@@ -11,11 +11,11 @@ export default function Companies() {
   const [searchTerm, setSearchTerm] = useState('');
   const [error, setError] = useState('');
 
-  // Estados para o Modal (Criação / Edição)
+  // Estados para o Modal (Criação / Edição de Empresa)
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   
-  // Campos do Formulário
+  // Campos do Formulário de Empresa
   const [cnpj, setCnpj] = useState('');
   const [companyName, setCompanyName] = useState('');
   const [tradeName, setTradeName] = useState('');
@@ -27,6 +27,19 @@ export default function Companies() {
   
   const [searchingCnpj, setSearchingCnpj] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+
+  // Estados para o Modal de Gestão/Adição de Documentos
+  const [isDocsModalOpen, setIsDocsModalOpen] = useState(false);
+  const [selectedCompanyForDocs, setSelectedCompanyForDocs] = useState(null);
+  const [companyDocuments, setCompanyDocuments] = useState([]);
+  
+  // Campos do Formulário de Novo Documento (com suporte a múltiplos ficheiros)
+  const [docTitle, setDocTitle] = useState('');
+  const [docCategory, setDocCategory] = useState('Habilitação Jurídica');
+  const [expirationDate, setExpirationDate] = useState('');
+  const [docNotes, setDocNotes] = useState('');
+  const [docFiles, setDocFiles] = useState([]); // Guarda múltiplos ficheiros
+  const [uploadingDoc, setUploadingDoc] = useState(false);
 
   useEffect(() => {
     fetchCompanies();
@@ -44,7 +57,7 @@ export default function Companies() {
     }
   };
 
-  // Função otimizada para consultar o CNPJ na Receita Federal
+  // Consulta automática de CNPJ na Receita Federal
   const handleFetchCnpj = async () => {
     const cleanCnpj = cnpj.replace(/\D/g, '');
 
@@ -57,7 +70,6 @@ export default function Companies() {
     setError('');
 
     try {
-      // 1. Tenta a consulta principal via BrasilAPI
       const response = await fetch(`https://brasilapi.com.br/api/cnpj/v1/${cleanCnpj}`);
       
       if (!response.ok) {
@@ -66,7 +78,6 @@ export default function Companies() {
 
       const data = await response.json();
 
-      // Preenchimento dos dados principais
       setCompanyName(data.razao_social || '');
       setTradeName(data.nome_fantasia || data.razao_social || '');
       
@@ -79,7 +90,6 @@ export default function Companies() {
       if (data.municipio) setCity(data.municipio);
       if (data.uf) setState(data.uf);
 
-      // 2. Tratamento para o E-mail (com fallback secundário caso a Receita Federal omita)
       let foundEmail = data.email && typeof data.email === 'string' && data.email.trim() !== '' ? data.email.toLowerCase() : '';
 
       if (!foundEmail) {
@@ -177,7 +187,104 @@ export default function Companies() {
     }
   };
 
-  // Filtrar empresas por nome ou CNPJ
+  // Funções para gerir documentos
+  const handleOpenDocsModal = async (company) => {
+    setSelectedCompanyForDocs(company);
+    setDocTitle('');
+    setDocCategory('Habilitação Jurídica');
+    setExpirationDate('');
+    setDocNotes('');
+    setDocFiles([]);
+    setIsDocsModalOpen(true);
+
+    try {
+      const res = await api.get('/documents');
+      const filtered = (res.data || []).filter(d => 
+        d.company?._id === company._id || d.company === company._id
+      );
+      setCompanyDocuments(filtered);
+    } catch (err) {
+      console.error('Erro ao buscar documentos da empresa:', err);
+      setCompanyDocuments([]);
+    }
+  };
+
+  // Submeter múltiplos ficheiros (ou um ficheiro sem fechar nem bloquear)
+  const handleAddDocumentToCompany = async (e) => {
+    e.preventDefault();
+    if (!selectedCompanyForDocs) return;
+
+    setUploadingDoc(true);
+    try {
+      // Se foram selecionados ficheiros
+      if (docFiles.length > 0) {
+        for (let i = 0; i < docFiles.length; i++) {
+          const file = docFiles[i];
+          const formData = new FormData();
+          
+          // Se houver mais do que 1 ficheiro selecionado, anexa o nome do ficheiro ao título
+          const titleToUse = docFiles.length > 1 
+            ? `${docTitle} (${file.name})`
+            : (docTitle || file.name);
+
+          formData.append('title', titleToUse);
+          formData.append('category', docCategory);
+          formData.append('expirationDate', expirationDate);
+          formData.append('companyId', selectedCompanyForDocs._id);
+          if (docNotes) formData.append('notes', docNotes);
+          formData.append('file', file);
+
+          await api.post('/documents', formData, {
+            headers: { 'Content-Type': 'multipart/form-data' }
+          });
+        }
+      } else {
+        // Envio sem ficheiro (apenas registo textual do documento/certidão)
+        const formData = new FormData();
+        formData.append('title', docTitle);
+        formData.append('category', docCategory);
+        formData.append('expirationDate', expirationDate);
+        formData.append('companyId', selectedCompanyForDocs._id);
+        if (docNotes) formData.append('notes', docNotes);
+
+        await api.post('/documents', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+
+      // Recarrega a lista de documentos atualizada
+      const res = await api.get('/documents');
+      const filtered = (res.data || []).filter(d => 
+        d.company?._id === selectedCompanyForDocs._id || d.company === selectedCompanyForDocs._id
+      );
+      setCompanyDocuments(filtered);
+
+      // Limpa os campos de input para permitir cadastrar novos logo de seguida
+      setDocTitle('');
+      setDocNotes('');
+      setDocFiles([]);
+      
+      alert(docFiles.length > 1 ? `${docFiles.length} documentos registados com sucesso!` : 'Documento registado com sucesso!');
+    } catch (err) {
+      console.error('Erro ao guardar documento(s):', err.response?.data || err);
+      alert(err.response?.data?.error || 'Erro ao guardar documento(s). Verifique os campos.');
+    } finally {
+      setUploadingDoc(false);
+    }
+  };
+
+  const handleDeleteDocument = async (docId) => {
+    if (!window.confirm('Tem a certeza que pretende eliminar este documento?')) return;
+    try {
+      await api.delete(`/documents/${docId}`);
+      setCompanyDocuments(prev => prev.filter(d => d._id !== docId));
+    } catch (err) {
+      console.error('Erro ao eliminar documento:', err);
+      alert('Erro ao eliminar o documento.');
+    }
+  };
+
+  // Filtrar empresas
   const filteredCompanies = companies.filter(comp => {
     const nameStr = (comp.companyName || comp.name || '').toLowerCase();
     const cnpjStr = (comp.cnpj || '').toLowerCase();
@@ -191,7 +298,7 @@ export default function Companies() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Gestão de Empresas Clientes</h1>
-          <p className="text-slate-500 mt-1">Cadastre empresas e consulte dados da Receita Federal automaticamente via CNPJ.</p>
+          <p className="text-slate-500 mt-1">Cadastre empresas, consulte a Receita Federal e gira múltiplos documentos por cliente.</p>
         </div>
         <button
           onClick={handleOpenCreateModal}
@@ -297,7 +404,14 @@ export default function Companies() {
                 </div>
               </div>
 
-              <div className="pt-4 mt-4 border-t border-slate-100 text-right">
+              {/* Botão para gerir documentos */}
+              <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
+                <button
+                  onClick={() => handleOpenDocsModal(comp)}
+                  className="text-xs font-semibold text-blue-600 hover:text-blue-700 hover:bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-100 transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Upload size={14} /> Gerir Documentos
+                </button>
                 <span className="text-[10px] uppercase font-semibold text-slate-400 tracking-wider">Cliente Ativo</span>
               </div>
             </div>
@@ -322,7 +436,6 @@ export default function Companies() {
             </div>
 
             <form onSubmit={handleSaveCompany} className="p-6 space-y-4">
-              {/* Campo CNPJ com Botão de Consulta Automática */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">CNPJ</label>
                 <div className="flex gap-2">
@@ -454,6 +567,175 @@ export default function Companies() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Modal para Gerir e Adicionar Múltiplos Documentos */}
+      {isDocsModalOpen && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl w-full max-w-2xl border border-slate-100 overflow-hidden max-h-[90vh] flex flex-col">
+            <div className="flex justify-between items-center p-6 border-b border-slate-100">
+              <div>
+                <h3 className="font-bold text-lg text-slate-800">Documentos da Empresa</h3>
+                <p className="text-xs text-slate-500 mt-0.5">{selectedCompanyForDocs?.companyName || selectedCompanyForDocs?.name}</p>
+              </div>
+              <button
+                onClick={() => setIsDocsModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 overflow-y-auto space-y-6 flex-1">
+              {/* Formulário para Adicionar Múltiplos Documentos */}
+              <form onSubmit={handleAddDocumentToCompany} className="bg-slate-50 p-4 rounded-xl border border-slate-200/80 space-y-3">
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide">Adicionar Novo Documento</h4>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Título / Nome Geral</label>
+                    <input
+                      type="text"
+                      value={docTitle}
+                      onChange={(e) => setDocTitle(e.target.value)}
+                      placeholder="Ex: Certidão Negativa ou Contrato"
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Categoria</label>
+                    <select
+                      value={docCategory}
+                      onChange={(e) => setDocCategory(e.target.value)}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 cursor-pointer"
+                    >
+                      <option value="Habilitação Jurídica">Habilitação Jurídica</option>
+                      <option value="Regularidade Fiscal">Regularidade Fiscal</option>
+                      <option value="Qualificação Técnica">Qualificação Técnica</option>
+                      <option value="Qualificação Econômico-Financeira">Qualificação Econômico-Financeira</option>
+                      <option value="Outros">Outros</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Validade / Expiração</label>
+                    <input
+                      type="date"
+                      value={expirationDate}
+                      onChange={(e) => setExpirationDate(e.target.value)}
+                      required
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">
+                      Ficheiros (Pode selecionar vários)
+                    </label>
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => setDocFiles(Array.from(e.target.files))}
+                      accept=".pdf,.png,.jpg,.jpeg"
+                      className="w-full px-2 py-1.5 bg-white border border-slate-200 rounded-lg text-[11px] text-slate-600 focus:outline-none cursor-pointer"
+                    />
+                    {docFiles.length > 0 && (
+                      <p className="text-[10px] text-blue-600 font-medium mt-1">
+                        {docFiles.length} {docFiles.length === 1 ? 'ficheiro selecionado' : 'ficheiros selecionados'}
+                      </p>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Observações (Opcional)</label>
+                  <input
+                    type="text"
+                    value={docNotes}
+                    onChange={(e) => setDocNotes(e.target.value)}
+                    placeholder="Detalhes adicionais..."
+                    className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                  />
+                </div>
+
+                <div className="flex justify-end pt-1">
+                  <button
+                    type="submit"
+                    disabled={uploadingDoc}
+                    className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg text-xs transition-all shadow-sm flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
+                  >
+                    <Plus size={14} /> {uploadingDoc ? 'A enviar...' : 'Adicionar Documento(s)'}
+                  </button>
+                </div>
+              </form>
+
+              {/* Lista de Documentos da empresa */}
+              <div>
+                <h4 className="text-xs font-bold text-slate-700 uppercase tracking-wide mb-3">Documentos Anexados ({companyDocuments.length})</h4>
+                {companyDocuments.length === 0 ? (
+                  <p className="text-xs text-slate-400 py-4 text-center bg-slate-50/50 rounded-xl border border-dashed border-slate-200">
+                    Nenhum documento registado para esta empresa ainda.
+                  </p>
+                ) : (
+                  <div className="space-y-2.5">
+                    {companyDocuments.map((doc) => (
+                      <div key={doc._id} className="p-3 bg-white border border-slate-200 rounded-xl flex items-center justify-between text-xs shadow-xs">
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-slate-800">{doc.title}</span>
+                            <span className="text-[10px] bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full font-medium">
+                              {doc.category}
+                            </span>
+                          </div>
+                          {doc.expirationDate && (
+                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                              <Calendar size={12} /> Validade: {new Date(doc.expirationDate).toLocaleDateString('pt-PT')}
+                            </p>
+                          )}
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {doc.fileUrl && (
+                            <a
+                              href={doc.fileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-slate-100 hover:bg-blue-50 text-slate-600 hover:text-blue-600 rounded-lg transition-all"
+                              title="Descarregar Ficheiro"
+                            >
+                              <Download size={14} />
+                            </a>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteDocument(doc._id)}
+                            className="p-1.5 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 rounded-lg transition-all cursor-pointer"
+                            title="Eliminar Documento"
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="p-4 border-t border-slate-100 bg-slate-50 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setIsDocsModalOpen(false)}
+                className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-200 hover:bg-slate-100 rounded-xl transition-all cursor-pointer"
+              >
+                Concluir / Fechar
+              </button>
+            </div>
           </div>
         </div>
       )}
