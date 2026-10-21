@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Calendar, Building2, FileText, Users, BarChart3, LogOut } from 'lucide-react';
+import { Home, Calendar, Building2, FileText, Users, BarChart3, LogOut } from 'lucide-react';
 
 export default function Sidebar() {
   const handleLogout = () => {
@@ -11,7 +11,7 @@ export default function Sidebar() {
   };
 
   return (
-    <aside className="w-20 hover:w-64 bg-slate-900 border-r border-slate-800 flex flex-col items-start py-6 fixed inset-y-0 left-0 z-40 justify-between shadow-xl transition-all duration-300 ease-in-out group overflow-hidden">
+    <aside className="w-20 hover:w-64 bg-slate-900 border-r border-slate-800 flex flex-col items-start py-6 fixed inset-y-0 left-0 z-40 justify-between shadow-xl transition-all duration-300 ease-in-out group overflow-hidden print:hidden">
       <div className="flex flex-col space-y-6 w-full">
         {/* Logótipo / Cabeçalho */}
         <div className="flex items-center gap-3 px-5 w-full">
@@ -26,6 +26,26 @@ export default function Sidebar() {
 
         {/* Links de Navegação */}
         <nav className="flex flex-col space-y-2 w-full px-3">
+          {/* NOVO ITEM: Licitações / Home */}
+          <NavLink
+            to="/"
+            className={({ isActive }) =>
+              `flex items-center gap-4 p-3 rounded-xl transition-all w-full ${
+                isActive 
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm' 
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`
+            }
+            title="Licitações"
+          >
+            <div className="shrink-0 flex items-center justify-center">
+              <Home size={20} />
+            </div>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap text-sm">
+              Licitações
+            </span>
+          </NavLink>
+
           <NavLink
             to="/schedules"
             className={({ isActive }) =>
@@ -123,7 +143,7 @@ export default function Sidebar() {
         </nav>
       </div>
 
-      {/* Botão de Terminar Sessão / Logout */}
+      {/* Botão de Terminar Sessão */}
       <div className="w-full px-3">
         <button
           onClick={handleLogout}

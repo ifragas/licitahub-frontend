@@ -8,6 +8,7 @@ import Schedules from './pages/Schedules';
 import Companies from './pages/Companies';
 import Documents from './pages/Documents';
 import Users from './pages/Users';
+import Reports from './pages/Reports';
 
 function LayoutContent() {
   const location = useLocation();
@@ -25,6 +26,7 @@ function LayoutContent() {
           <Route path="/companies" element={<Companies />} />
           <Route path="/documents" element={<Documents />} />
           <Route path="/users" element={<Users />} />
+          <Route path="/reports" element={<Reports />} />
         </Routes>
       </main>
     </div>
