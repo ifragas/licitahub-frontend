@@ -60,7 +60,7 @@ export default function Login() {
           <div className="p-2.5 bg-blue-600 rounded-xl text-white">
             <FileText size={26} />
           </div>
-          <span className="font-bold text-2xl text-slate-900">LicitaHub</span>
+          <span className="font-bold text-2xl text-slate-900">Gestorae</span>
         </div>
         <h2 className="text-xl font-semibold text-slate-800 text-center mb-2">Bem-vindo de volta</h2>
         <p className="text-sm text-slate-500 text-center mb-6">Introduza os seus dados para aceder ao sistema.</p>
