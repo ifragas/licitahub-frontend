@@ -1,8 +1,10 @@
+
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import { 
-  Building2, Calendar, Plus, Search, Filter, AlertCircle, 
-  ExternalLink, X, CheckCircle, Clock, Trash2, Pencil, Trophy, ArrowUpDown, Check
+import {
+  Building2, Calendar, Plus, Search, Filter, AlertCircle,
+  ExternalLink, X, CheckCircle, Clock, Trash2, Pencil, Trophy,
+  ArrowUpDown, Check
 } from 'lucide-react';
 
 export default function Licitacoes() {
@@ -13,13 +15,13 @@ export default function Licitacoes() {
   const [error, setError] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
-  // Estados de Filtros Avançados
+  // Estados dos filtros
   const [selectedCompany, setSelectedCompany] = useState('');
   const [selectedOrgan, setSelectedOrgan] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [sortBy, setSortBy] = useState('date-asc');
 
-  // Estados para o Modal (Criação / Edição)
+  // Estados do modal de criação e edição
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingId, setEditingId] = useState(null);
   const [title, setTitle] = useState('');
@@ -41,10 +43,11 @@ export default function Licitacoes() {
     try {
       const response = await api.get('/api/bids');
       setLicitacoes(response.data);
-      setLoading(false);
+      setError('');
     } catch (err) {
-      console.error("Erro ao carregar licitações:", err);
-      setError("Erro ao carregar licitações da API.");
+      console.error('Erro ao carregar licitações:', err);
+      setError('Erro ao carregar licitações da API.');
+    } finally {
       setLoading(false);
     }
   };
@@ -54,18 +57,19 @@ export default function Licitacoes() {
       const response = await api.get('/companies');
       setCompanies(response.data);
     } catch (err) {
-      console.error("Erro ao carregar empresas:", err);
+      console.error('Erro ao carregar empresas:', err);
     }
   };
 
   const showToast = (msg) => {
     setSuccessMessage(msg);
+
     setTimeout(() => {
       setSuccessMessage('');
     }, 4000);
   };
 
-  const handleOpenCreateModal = () => {
+  const resetForm = () => {
     setEditingId(null);
     setTitle('');
     setOrgan('');
@@ -75,28 +79,46 @@ export default function Licitacoes() {
     setEditalUrl('');
     setOpeningDate('');
     setNotes('');
+    setError('');
+  };
+
+  const handleOpenCreateModal = () => {
+    resetForm();
     setIsModalOpen(true);
+  };
+
+  // Converte uma data ISO para o formato local exigido por datetime-local.
+  // Não utiliza toISOString() nesta etapa, pois isso converteria novamente
+  // o horário para UTC antes de preencher o campo.
+  const formatDateTimeLocal = (dateValue) => {
+    if (!dateValue) return '';
+
+    const date = new Date(dateValue);
+
+    if (Number.isNaN(date.getTime())) return '';
+
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+
+    return `${year}-${month}-${day}T${hours}:${minutes}`;
   };
 
   const handleOpenEditModal = (item) => {
     setEditingId(item._id);
     setTitle(item.title || '');
     setOrgan(item.organ || '');
-    setEstimatedValue(item.estimatedValue || '');
+    setEstimatedValue(item.estimatedValue ?? '');
     setCompanyId(item.company?._id || item.company || '');
     setStatus(item.status || 'Em Análise');
     setEditalUrl(item.editalUrl || '');
-    
-    if (item.openingDate) {
-      const dateObj = new Date(item.openingDate);
-      const tzOffset = dateObj.getTimezoneOffset() * 60000;
-      const localISOTime = (new Date(dateObj - tzOffset)).toISOString().slice(0, 16);
-      setOpeningDate(localISOTime);
-    } else {
-      setOpeningDate('');
-    }
+
+    setOpeningDate(formatDateTimeLocal(item.openingDate));
 
     setNotes(item.notes || '');
+    setError('');
     setIsModalOpen(true);
   };
 
@@ -105,18 +127,25 @@ export default function Licitacoes() {
     setSubmitting(true);
     setError('');
 
-    const payload = {
-      title,
-      organ,
-      estimatedValue: Number(estimatedValue) || 0,
-      company: companyId,
-      status,
-      editalUrl,
-      openingDate,
-      notes
-    };
-
     try {
+      // datetime-local fornece uma data/hora sem indicação de fuso.
+      // O navegador interpreta o valor como horário local e toISOString()
+      // converte o instante correspondente para UTC.
+      const openingDateISO = openingDate
+        ? new Date(openingDate).toISOString()
+        : null;
+
+      const payload = {
+        title,
+        organ,
+        estimatedValue: Number(estimatedValue) || 0,
+        company: companyId,
+        status,
+        editalUrl,
+        openingDate: openingDateISO,
+        notes
+      };
+
       if (editingId) {
         await api.put(`/api/bids/${editingId}`, payload);
         showToast('Licitação atualizada com sucesso!');
@@ -126,10 +155,14 @@ export default function Licitacoes() {
       }
 
       setIsModalOpen(false);
-      fetchLicitacoes();
+      await fetchLicitacoes();
     } catch (err) {
-      console.error("Erro ao guardar licitação:", err);
-      setError(err.response?.data?.error || 'Erro ao guardar licitação.');
+      console.error('Erro ao guardar licitação:', err);
+
+      setError(
+        err.response?.data?.error ||
+        'Erro ao guardar licitação. Verifique os dados e tente novamente.'
+      );
     } finally {
       setSubmitting(false);
     }
@@ -137,70 +170,106 @@ export default function Licitacoes() {
 
   const handleUpdateStatus = async (itemOrId, newStatus) => {
     try {
-      const item = typeof itemOrId === 'object' ? itemOrId : licitacoes.find(l => l._id === itemOrId);
-      const id = typeof itemOrId === 'object' ? itemOrId._id : itemOrId;
+      const item = typeof itemOrId === 'object'
+        ? itemOrId
+        : licitacoes.find((l) => l._id === itemOrId);
+
+      const id = typeof itemOrId === 'object'
+        ? itemOrId._id
+        : itemOrId;
 
       let removeSchedule = false;
 
-      // Se a licitação estava Aprovada e vai passar para outro estado, pergunta se deseja eliminar o agendamento
       if (item && item.status === 'Aprovada' && newStatus !== 'Aprovada') {
         removeSchedule = window.confirm(
-          "Esta licitação estava aprovada e possui um agendamento associado.\n\nDeseja eliminar também o agendamento vinculado a esta licitação?"
+          'Esta licitação estava aprovada e possui um agendamento associado.\n\n' +
+          'Deseja eliminar também o agendamento vinculado a esta licitação?'
         );
       }
 
-      await api.put(`/api/bids/${id}`, { 
-        status: newStatus, 
-        removeSchedule 
+      await api.put(`/api/bids/${id}`, {
+        status: newStatus,
+        removeSchedule
       });
 
       showToast(`Estado alterado para "${newStatus}" com sucesso!`);
-      fetchLicitacoes();
+      await fetchLicitacoes();
     } catch (err) {
-      console.error("Erro ao atualizar estado:", err);
-      alert("Erro ao alterar o estado da licitação.");
+      console.error('Erro ao atualizar estado:', err);
+      alert('Erro ao alterar o estado da licitação.');
     }
   };
 
   const handleDeleteBid = async (id) => {
-    if (!window.confirm("Tem a certeza que deseja eliminar esta licitação?")) return;
+    if (!window.confirm('Tem a certeza que deseja eliminar esta licitação?')) {
+      return;
+    }
+
     try {
       await api.delete(`/api/bids/${id}`);
       showToast('Licitação eliminada com sucesso!');
-      fetchLicitacoes();
+      await fetchLicitacoes();
     } catch (err) {
-      console.error("Erro ao eliminar licitação:", err);
-      alert("Erro ao eliminar a licitação.");
+      console.error('Erro ao eliminar licitação:', err);
+      alert('Erro ao eliminar a licitação.');
     }
   };
 
-  const uniqueOrgans = Array.from(new Set(licitacoes.map(item => item.organ).filter(Boolean)));
+  const uniqueOrgans = Array.from(
+    new Set(licitacoes.map((item) => item.organ).filter(Boolean))
+  );
 
-  const filteredLicitacoes = licitacoes.filter(item => {
-    const matchesSearch = 
-      item.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      item.organ?.toLowerCase().includes(searchTerm.toLowerCase());
+  const filteredLicitacoes = licitacoes
+    .filter((item) => {
+      const term = searchTerm.toLowerCase();
 
-    const itemCompanyId = item.company?._id || item.company;
-    const matchesCompany = !selectedCompany || itemCompanyId === selectedCompany;
-    const matchesOrgan = !selectedOrgan || item.organ === selectedOrgan;
-    
-    const itemStatus = item.status === 'Vencida' ? 'Vencedora' : item.status;
-    const matchesStatus = !selectedStatus || itemStatus === selectedStatus;
+      const matchesSearch =
+        item.title?.toLowerCase().includes(term) ||
+        item.organ?.toLowerCase().includes(term);
 
-    return matchesSearch && matchesCompany && matchesOrgan && matchesStatus;
-  }).sort((a, b) => {
-    if (sortBy === 'date-asc') {
-      return new Date(a.openingDate || 0) - new Date(b.openingDate || 0);
-    } else if (sortBy === 'date-desc') {
-      return new Date(b.openingDate || 0) - new Date(a.openingDate || 0);
-    } else if (sortBy === 'value-desc') {
-      return (Number(b.estimatedValue) || 0) - (Number(a.estimatedValue) || 0);
-    } else if (sortBy === 'value-asc') {
-      return (Number(a.estimatedValue) || 0) - (Number(b.estimatedValue) || 0);
-    }
-    return 0;
-  });
+      const itemCompanyId = item.company?._id || item.company;
+      const matchesCompany =
+        !selectedCompany || itemCompanyId === selectedCompany;
+
+      const matchesOrgan =
+        !selectedOrgan || item.organ === selectedOrgan;
+
+      const itemStatus =
+        item.status === 'Vencida' ? 'Vencedora' : item.status;
+
+      const matchesStatus =
+        !selectedStatus || itemStatus === selectedStatus;
+
+      return (
+        matchesSearch &&
+        matchesCompany &&
+        matchesOrgan &&
+        matchesStatus
+      );
+    })
+    .sort((a, b) => {
+      if (sortBy === 'date-asc') {
+        return new Date(a.openingDate || 0) -
+          new Date(b.openingDate || 0);
+      }
+
+      if (sortBy === 'date-desc') {
+        return new Date(b.openingDate || 0) -
+          new Date(a.openingDate || 0);
+      }
+
+      if (sortBy === 'value-desc') {
+        return (Number(b.estimatedValue) || 0) -
+          (Number(a.estimatedValue) || 0);
+      }
+
+      if (sortBy === 'value-asc') {
+        return (Number(a.estimatedValue) || 0) -
+          (Number(b.estimatedValue) || 0);
+      }
+
+      return 0;
+    });
 
   return (
     <div className="p-8 max-w-7xl mx-auto relative">
@@ -213,10 +282,15 @@ export default function Licitacoes() {
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">Gestão de Licitações</h1>
-          <p className="text-slate-500 mt-1">Garimpo de oportunidades e validação de viabilidade com clientes.</p>
+          <h1 className="text-3xl font-bold text-slate-900 tracking-tight">
+            Gestão de Licitações
+          </h1>
+          <p className="text-slate-500 mt-1">
+            Garimpo de oportunidades e validação de viabilidade com clientes.
+          </p>
         </div>
-        <button 
+
+        <button
           onClick={handleOpenCreateModal}
           className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-5 py-2.5 rounded-xl flex items-center gap-2 shadow-sm hover:shadow transition-all cursor-pointer"
         >
@@ -278,7 +352,9 @@ export default function Licitacoes() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-2 border-t border-slate-100">
           <div className="flex items-center gap-2">
-            <span className="text-xs font-semibold text-slate-500 uppercase">Estado:</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">
+              Estado:
+            </span>
             <select
               value={selectedStatus}
               onChange={(e) => setSelectedStatus(e.target.value)}
@@ -294,7 +370,9 @@ export default function Licitacoes() {
 
           <div className="flex items-center gap-2">
             <ArrowUpDown size={14} className="text-slate-400" />
-            <span className="text-xs font-semibold text-slate-500 uppercase">Ordenar por:</span>
+            <span className="text-xs font-semibold text-slate-500 uppercase">
+              Ordenar por:
+            </span>
             <select
               value={sortBy}
               onChange={(e) => setSortBy(e.target.value)}
@@ -318,9 +396,13 @@ export default function Licitacoes() {
           <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center mx-auto mb-4">
             <AlertCircle size={24} />
           </div>
-          <h3 className="text-lg font-semibold text-slate-800">Nenhuma licitação encontrada</h3>
-          <p className="text-slate-500 text-sm mt-1 mb-6">Tente ajustar os filtros ou registe uma nova oportunidade.</p>
-          <button 
+          <h3 className="text-lg font-semibold text-slate-800">
+            Nenhuma licitação encontrada
+          </h3>
+          <p className="text-slate-500 text-sm mt-1 mb-6">
+            Tente ajustar os filtros ou registe uma nova oportunidade.
+          </p>
+          <button
             onClick={handleOpenCreateModal}
             className="bg-blue-600 text-white px-4 py-2 rounded-xl text-sm font-medium hover:bg-blue-700 transition-all cursor-pointer"
           >
@@ -330,32 +412,46 @@ export default function Licitacoes() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredLicitacoes.map((item) => (
-            <div key={item._id} className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between">
+            <div
+              key={item._id}
+              className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+            >
               <div>
                 <div className="flex items-center justify-between gap-2 mb-3">
-                  <span className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit ${
-                    item.status === 'Vencedora' || item.status === 'Vencida' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                    item.status === 'Aprovada' ? 'bg-blue-50 text-blue-600 border border-blue-100' :
-                    item.status === 'Rejeitada' ? 'bg-red-50 text-red-600 border border-red-100' :
-                    'bg-amber-50 text-amber-600 border border-amber-100'
-                  }`}>
-                    {(item.status === 'Vencedora' || item.status === 'Vencida') && <Trophy size={13} className="text-emerald-600" />}
-                    {item.status === 'Vencida' ? 'Vencedora' : (item.status || 'Em Análise')}
-                  </span>
-                  
-                  <div className="flex items-center gap-1">
-                    {item.status !== 'Aprovada' && item.status !== 'Vencedora' && item.status !== 'Vencida' && (
-                      <button 
-                        onClick={() => handleUpdateStatus(item, 'Aprovada')}
-                        className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                        title="Aprovar Licitação"
-                      >
-                        <CheckCircle size={16} />
-                      </button>
+                  <span
+                    className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit ${
+                      item.status === 'Vencedora' || item.status === 'Vencida'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : item.status === 'Aprovada'
+                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
+                        : item.status === 'Rejeitada'
+                        ? 'bg-red-50 text-red-600 border border-red-100'
+                        : 'bg-amber-50 text-amber-600 border border-amber-100'
+                    }`}
+                  >
+                    {(item.status === 'Vencedora' || item.status === 'Vencida') && (
+                      <Trophy size={13} className="text-emerald-600" />
                     )}
+                    {item.status === 'Vencida'
+                      ? 'Vencedora'
+                      : item.status || 'Em Análise'}
+                  </span>
+
+                  <div className="flex items-center gap-1">
+                    {item.status !== 'Aprovada' &&
+                      item.status !== 'Vencedora' &&
+                      item.status !== 'Vencida' && (
+                        <button
+                          onClick={() => handleUpdateStatus(item, 'Aprovada')}
+                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                          title="Aprovar Licitação"
+                        >
+                          <CheckCircle size={16} />
+                        </button>
+                      )}
 
                     {item.status === 'Aprovada' && (
-                      <button 
+                      <button
                         onClick={() => handleUpdateStatus(item, 'Em Análise')}
                         className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
                         title="Reverter para Em Análise"
@@ -364,14 +460,15 @@ export default function Licitacoes() {
                       </button>
                     )}
 
-                    <button 
+                    <button
                       onClick={() => handleOpenEditModal(item)}
                       className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
                       title="Editar Licitação"
                     >
                       <Pencil size={16} />
                     </button>
-                    <button 
+
+                    <button
                       onClick={() => handleDeleteBid(item._id)}
                       className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
                       title="Eliminar Licitação"
@@ -381,21 +478,32 @@ export default function Licitacoes() {
                   </div>
                 </div>
 
-                <h3 className="font-semibold text-slate-800 text-base line-clamp-2 mb-2">{item.title}</h3>
-                
+                <h3 className="font-semibold text-slate-800 text-base line-clamp-2 mb-2">
+                  {item.title}
+                </h3>
+
                 <p className="text-sm text-slate-600 flex items-center gap-1.5 mb-2 font-medium">
                   <Building2 size={16} className="text-blue-600 shrink-0" />
-                  <span className="truncate">{item.company?.companyName || item.company?.name || 'Cliente não atribuído'}</span>
+                  <span className="truncate">
+                    {item.company?.companyName ||
+                      item.company?.name ||
+                      'Cliente não atribuído'}
+                  </span>
                 </p>
 
                 <p className="text-xs text-slate-500 mb-4 truncate">
-                  <span className="font-semibold text-slate-700">Órgão:</span> {item.organ}
+                  <span className="font-semibold text-slate-700">Órgão:</span>{' '}
+                  {item.organ}
                 </p>
 
                 {item.editalUrl && (
-                  <a 
-                    href={item.editalUrl.startsWith('http') ? item.editalUrl : `https://${item.editalUrl}`} 
-                    target="_blank" 
+                  <a
+                    href={
+                      item.editalUrl.startsWith('http')
+                        ? item.editalUrl
+                        : `https://${item.editalUrl}`
+                    }
+                    target="_blank"
                     rel="noopener noreferrer"
                     className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium mb-4"
                   >
@@ -406,10 +514,19 @@ export default function Licitacoes() {
 
               <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
                 <span className="flex items-center gap-1">
-                  <Calendar size={14} /> {item.openingDate ? new Date(item.openingDate).toLocaleDateString('pt-PT') : 'A definir'}
+                  <Calendar size={14} />
+                  {item.openingDate
+                    ? new Date(item.openingDate).toLocaleDateString('pt-BR')
+                    : 'A definir'}
                 </span>
+
                 <span className="font-bold text-emerald-600">
-                  {item.estimatedValue ? Number(item.estimatedValue).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : 'R$ 0,00'}
+                  {item.estimatedValue
+                    ? Number(item.estimatedValue).toLocaleString('pt-BR', {
+                        style: 'currency',
+                        currency: 'BRL'
+                      })
+                    : 'R$ 0,00'}
                 </span>
               </div>
             </div>
@@ -422,9 +539,13 @@ export default function Licitacoes() {
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg border border-slate-100 overflow-hidden">
             <div className="flex justify-between items-center p-6 border-b border-slate-100">
               <h3 className="font-bold text-lg text-slate-800">
-                {editingId ? 'Editar Licitação' : 'Nova Licitação / Oportunidade'}
+                {editingId
+                  ? 'Editar Licitação'
+                  : 'Nova Licitação / Oportunidade'}
               </h3>
+
               <button
+                type="button"
                 onClick={() => setIsModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition-colors cursor-pointer"
               >
@@ -434,7 +555,9 @@ export default function Licitacoes() {
 
             <form onSubmit={handleSaveBid} className="p-6 space-y-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Objeto / Título da Licitação</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                  Objeto / Título da Licitação
+                </label>
                 <input
                   type="text"
                   value={title}
@@ -447,7 +570,9 @@ export default function Licitacoes() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Órgão Licitante</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                    Órgão Licitante
+                  </label>
                   <input
                     type="text"
                     value={organ}
@@ -459,7 +584,9 @@ export default function Licitacoes() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Valor Estimado (R$)</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                    Valor Estimado (R$)
+                  </label>
                   <input
                     type="number"
                     step="0.01"
@@ -473,7 +600,9 @@ export default function Licitacoes() {
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Empresa Cliente</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                    Empresa Cliente
+                  </label>
                   <select
                     value={companyId}
                     onChange={(e) => setCompanyId(e.target.value)}
@@ -490,7 +619,9 @@ export default function Licitacoes() {
                 </div>
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Estado de Análise</label>
+                  <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                    Estado de Análise
+                  </label>
                   <select
                     value={status}
                     onChange={(e) => setStatus(e.target.value)}
@@ -505,7 +636,9 @@ export default function Licitacoes() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Data de Abertura</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                  Data de Abertura
+                </label>
                 <input
                   type="datetime-local"
                   value={openingDate}
@@ -515,7 +648,9 @@ export default function Licitacoes() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Link do Edital</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                  Link do Edital
+                </label>
                 <input
                   type="url"
                   value={editalUrl}
@@ -526,7 +661,9 @@ export default function Licitacoes() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Notas / Observações</label>
+                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
+                  Notas / Observações
+                </label>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
@@ -544,12 +681,17 @@ export default function Licitacoes() {
                 >
                   Cancelar
                 </button>
+
                 <button
                   type="submit"
                   disabled={submitting}
                   className="px-4 py-2.5 text-sm font-medium bg-blue-600 hover:bg-blue-700 text-white rounded-xl transition-all shadow-sm cursor-pointer disabled:opacity-50"
                 >
-                  {submitting ? 'A guardar...' : editingId ? 'Guardar Alterações' : 'Salvar Licitação'}
+                  {submitting
+                    ? 'A guardar...'
+                    : editingId
+                    ? 'Guardar Alterações'
+                    : 'Salvar Licitação'}
                 </button>
               </div>
             </form>
