@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import api from '../services/api';
-import { Calendar, Plus, Clock, Building, Link as LinkIcon, X, Pencil, Trash2, ExternalLink, FileText } from 'lucide-react';
+import { Calendar, Plus, Clock, Building, Link as LinkIcon, X, Pencil, Trash2, ExternalLink, Mail } from 'lucide-react';
 
 export default function Schedules() {
   const [schedules, setSchedules] = useState([]);
@@ -19,6 +19,7 @@ export default function Schedules() {
   const [bidId, setBidId] = useState('');
   const [editalUrl, setEditalUrl] = useState('');
   const [notes, setNotes] = useState('');
+  const [notificationEmail, setNotificationEmail] = useState(''); // Novo estado para o e-mail de lembrete
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
@@ -66,6 +67,7 @@ export default function Schedules() {
     setBidId('');
     setEditalUrl('');
     setNotes('');
+    setNotificationEmail('');
     setIsModalOpen(true);
   };
 
@@ -85,10 +87,10 @@ export default function Schedules() {
     setBidId(schedule.bid?._id || schedule.bid || '');
     setEditalUrl(schedule.locationOrUrl || schedule.editalUrl || '');
     setNotes(schedule.notes || '');
+    setNotificationEmail(schedule.notificationEmail || '');
     setIsModalOpen(true);
   };
 
-  // Quando o utilizador seleciona uma licitação, podemos preencher automaticamente alguns campos
   const handleSelectBid = (selectedBidId) => {
     setBidId(selectedBidId);
     if (!selectedBidId) return;
@@ -134,7 +136,8 @@ export default function Schedules() {
       companyId,
       bidId: bidId || null,
       locationOrUrl: editalUrl,
-      notes
+      notes,
+      notificationEmail
     };
 
     try {
@@ -206,6 +209,11 @@ export default function Schedules() {
                       <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
                         <Clock size={14} /> {new Date(schedule.eventDate).toLocaleString('pt-PT')}
                       </p>
+                      {schedule.notificationEmail && (
+                        <p className="text-xs text-emerald-600 flex items-center gap-1 mt-1 font-medium">
+                          <Mail size={14} /> Lembrete configurado para: {schedule.notificationEmail}
+                        </p>
+                      )}
                       {schedule.locationOrUrl && (
                         <p className="text-xs text-slate-500 flex items-center gap-1 mt-1">
                           <LinkIcon size={14} />{' '}
@@ -222,7 +230,6 @@ export default function Schedules() {
                     </div>
                   </div>
 
-                  {/* Botões de Ação no Cartão */}
                   <div className="flex items-center gap-2">
                     <button
                       onClick={() => handleOpenEditModal(schedule)}
@@ -263,7 +270,6 @@ export default function Schedules() {
             </div>
 
             <form onSubmit={handleSaveSchedule} className="p-6 space-y-4">
-              {/* Selecionar Licitação Opcional */}
               <div>
                 <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">Vincular a Licitação (Opcional)</label>
                 <select
@@ -336,6 +342,18 @@ export default function Schedules() {
                   required
                   className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">E-mail para Notificação (Lembrete)</label>
+                <input
+                  type="email"
+                  value={notificationEmail}
+                  onChange={(e) => setNotificationEmail(e.target.value)}
+                  placeholder="exemplo@dominio.com"
+                  className="w-full px-4 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                />
+                <span className="text-[11px] text-slate-400 mt-1 block">Será enviado um alerta automático 1 dia antes às 08:05.</span>
               </div>
 
               <div>

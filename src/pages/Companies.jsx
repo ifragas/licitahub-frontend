@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import api from '../services/api';
 import { 
   Building2, Plus, Search, Mail, Phone, MapPin, 
-  X, Pencil, Trash2, Loader2, FileText, Upload, Calendar, AlertCircle, Download
+  X, Pencil, Trash2, Loader2, FileText, Upload, Calendar, AlertCircle, Download, CheckCircle2
 } from 'lucide-react';
 
 export default function Companies() {
@@ -33,12 +33,13 @@ export default function Companies() {
   const [selectedCompanyForDocs, setSelectedCompanyForDocs] = useState(null);
   const [companyDocuments, setCompanyDocuments] = useState([]);
   
-  // Campos do Formulário de Novo Documento (com suporte a múltiplos ficheiros)
+  // Campos do Formulário de Novo Documento
   const [docTitle, setDocTitle] = useState('');
   const [docCategory, setDocCategory] = useState('Habilitação Jurídica');
   const [expirationDate, setExpirationDate] = useState('');
+  const [doesNotExpire, setDoesNotExpire] = useState(false); // NOVO: Estado para "Não expira"
   const [docNotes, setDocNotes] = useState('');
-  const [docFiles, setDocFiles] = useState([]); // Guarda múltiplos ficheiros
+  const [docFiles, setDocFiles] = useState([]);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
   useEffect(() => {
@@ -187,12 +188,13 @@ export default function Companies() {
     }
   };
 
-  // Funções para gerir documentos
+  // Funções para gerir documentos da empresa
   const handleOpenDocsModal = async (company) => {
     setSelectedCompanyForDocs(company);
     setDocTitle('');
     setDocCategory('Habilitação Jurídica');
     setExpirationDate('');
+    setDoesNotExpire(false);
     setDocNotes('');
     setDocFiles([]);
     setIsDocsModalOpen(true);
@@ -209,27 +211,26 @@ export default function Companies() {
     }
   };
 
-  // Submeter múltiplos ficheiros (ou um ficheiro sem fechar nem bloquear)
   const handleAddDocumentToCompany = async (e) => {
     e.preventDefault();
     if (!selectedCompanyForDocs) return;
 
     setUploadingDoc(true);
     try {
-      // Se foram selecionados ficheiros
       if (docFiles.length > 0) {
         for (let i = 0; i < docFiles.length; i++) {
           const file = docFiles[i];
           const formData = new FormData();
           
-          // Se houver mais do que 1 ficheiro selecionado, anexa o nome do ficheiro ao título
           const titleToUse = docFiles.length > 1 
             ? `${docTitle} (${file.name})`
             : (docTitle || file.name);
 
           formData.append('title', titleToUse);
           formData.append('category', docCategory);
-          formData.append('expirationDate', expirationDate);
+          if (!doesNotExpire && expirationDate) {
+            formData.append('expirationDate', expirationDate);
+          }
           formData.append('companyId', selectedCompanyForDocs._id);
           if (docNotes) formData.append('notes', docNotes);
           formData.append('file', file);
@@ -239,11 +240,12 @@ export default function Companies() {
           });
         }
       } else {
-        // Envio sem ficheiro (apenas registo textual do documento/certidão)
         const formData = new FormData();
         formData.append('title', docTitle);
         formData.append('category', docCategory);
-        formData.append('expirationDate', expirationDate);
+        if (!doesNotExpire && expirationDate) {
+          formData.append('expirationDate', expirationDate);
+        }
         formData.append('companyId', selectedCompanyForDocs._id);
         if (docNotes) formData.append('notes', docNotes);
 
@@ -252,19 +254,20 @@ export default function Companies() {
         });
       }
 
-      // Recarrega a lista de documentos atualizada
       const res = await api.get('/documents');
       const filtered = (res.data || []).filter(d => 
         d.company?._id === selectedCompanyForDocs._id || d.company === selectedCompanyForDocs._id
       );
       setCompanyDocuments(filtered);
 
-      // Limpa os campos de input para permitir cadastrar novos logo de seguida
+      // Limpa os campos
       setDocTitle('');
       setDocNotes('');
       setDocFiles([]);
+      setExpirationDate('');
+      setDoesNotExpire(false);
       
-      alert(docFiles.length > 1 ? `${docFiles.length} documentos registados com sucesso!` : 'Documento registado com sucesso!');
+      alert(docFiles.length > 1 ? `${docFiles.length} documentos registrados com sucesso!` : 'Documento registrado com sucesso!');
     } catch (err) {
       console.error('Erro ao guardar documento(s):', err.response?.data || err);
       alert(err.response?.data?.error || 'Erro ao guardar documento(s). Verifique os campos.');
@@ -284,7 +287,6 @@ export default function Companies() {
     }
   };
 
-  // Filtrar empresas
   const filteredCompanies = companies.filter(comp => {
     const nameStr = (comp.companyName || comp.name || '').toLowerCase();
     const cnpjStr = (comp.cnpj || '').toLowerCase();
@@ -404,7 +406,6 @@ export default function Companies() {
                 </div>
               </div>
 
-              {/* Botão para gerir documentos */}
               <div className="pt-4 mt-4 border-t border-slate-100 flex items-center justify-between">
                 <button
                   onClick={() => handleOpenDocsModal(comp)}
@@ -600,7 +601,7 @@ export default function Companies() {
                       type="text"
                       value={docTitle}
                       onChange={(e) => setDocTitle(e.target.value)}
-                      placeholder="Ex: Certidão Negativa ou Contrato"
+                      placeholder="Ex: Certidão Negativa, Contrato Social ou RG"
                       className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                   </div>
@@ -623,13 +624,30 @@ export default function Companies() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-[11px] font-semibold text-slate-600 uppercase mb-1">Validade / Expiração</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-[11px] font-semibold text-slate-600 uppercase">
+                        Validade / Expiração
+                      </label>
+                      <label className="flex items-center gap-1.5 text-[11px] text-slate-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={doesNotExpire}
+                          onChange={(e) => {
+                            setDoesNotExpire(e.target.checked);
+                            if (e.target.checked) setExpirationDate('');
+                          }}
+                          className="rounded text-blue-600 focus:ring-blue-500"
+                        />
+                        Não expira
+                      </label>
+                    </div>
                     <input
                       type="date"
                       value={expirationDate}
                       onChange={(e) => setExpirationDate(e.target.value)}
-                      required
-                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                      disabled={doesNotExpire}
+                      required={!doesNotExpire}
+                      className="w-full px-3 py-2 bg-white border border-slate-200 rounded-lg text-xs focus:outline-none focus:ring-2 focus:ring-blue-500/20 disabled:bg-slate-100 disabled:text-slate-400"
                     />
                   </div>
 
@@ -692,11 +710,17 @@ export default function Companies() {
                               {doc.category}
                             </span>
                           </div>
-                          {doc.expirationDate && (
-                            <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
-                              <Calendar size={12} /> Validade: {new Date(doc.expirationDate).toLocaleDateString('pt-PT')}
-                            </p>
-                          )}
+                          <p className="text-[11px] text-slate-500 flex items-center gap-1 mt-1">
+                            {doc.expirationDate ? (
+                              <>
+                                <Calendar size={12} /> Validade: {new Date(doc.expirationDate).toLocaleDateString('pt-PT')}
+                              </>
+                            ) : (
+                              <>
+                                <CheckCircle2 size={12} className="text-slate-400" /> Sem validade / Não expira
+                              </>
+                            )}
+                          </p>
                         </div>
 
                         <div className="flex items-center gap-2">

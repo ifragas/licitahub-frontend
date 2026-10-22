@@ -19,7 +19,7 @@ export default function Sidebar() {
             <Building2 size={24} />
           </div>
           <div className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap overflow-hidden">
-            <h2 className="font-bold text-white text-base leading-tight">LicitaHub</h2>
+            <h2 className="font-bold text-white text-base leading-tight">Gestorae</h2>
             <p className="text-xs text-slate-400">Gestão e Controle</p>
           </div>
         </div>
