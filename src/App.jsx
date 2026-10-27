@@ -9,6 +9,7 @@ import Companies from './pages/Companies';
 import Documents from './pages/Documents';
 import Users from './pages/Users';
 import Reports from './pages/Reports';
+import Garimpo from './pages/Garimpo';
 
 function LayoutContent() {
   const location = useLocation();
@@ -27,6 +28,7 @@ function LayoutContent() {
           <Route path="/documents" element={<Documents />} />
           <Route path="/users" element={<Users />} />
           <Route path="/reports" element={<Reports />} />
+          <Route path="/garimpo" element={<Garimpo />} />
         </Routes>
       </main>
     </div>

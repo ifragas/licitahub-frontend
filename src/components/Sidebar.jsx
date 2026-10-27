@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { Home, Calendar, Building2, FileText, Users, BarChart3, LogOut } from 'lucide-react';
+import { Home, Search, Calendar, Building2, FileText, Users, BarChart3, LogOut } from 'lucide-react';
 
 export default function Sidebar() {
   const handleLogout = () => {
@@ -26,7 +26,7 @@ export default function Sidebar() {
 
         {/* Links de Navegação */}
         <nav className="flex flex-col space-y-2 w-full px-3">
-          {/* NOVO ITEM: Licitações / Home */}
+          {/* Item: Licitações / Home */}
           <NavLink
             to="/"
             className={({ isActive }) =>
@@ -43,6 +43,26 @@ export default function Sidebar() {
             </div>
             <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap text-sm">
               Licitações
+            </span>
+          </NavLink>
+
+          {/* NOVO ITEM: Garimpo PNCP */}
+          <NavLink
+            to="/garimpo"
+            className={({ isActive }) =>
+              `flex items-center gap-4 p-3 rounded-xl transition-all w-full ${
+                isActive 
+                  ? 'bg-blue-600 text-white font-semibold shadow-sm' 
+                  : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+              }`
+            }
+            title="Garimpo PNCP"
+          >
+            <div className="shrink-0 flex items-center justify-center">
+              <Search size={20} />
+            </div>
+            <span className="opacity-0 group-hover:opacity-100 transition-opacity duration-300 whitespace-nowrap text-sm">
+              Garimpo PNCP
             </span>
           </NavLink>
 

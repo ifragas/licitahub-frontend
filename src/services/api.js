@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Cria a instância do Axios com a URL base da tua API no Render
 const api = axios.create({
-  baseURL: 'https://consultoria-licitacoes-api.onrender.com',
+  baseURL: 'https://consultoria-licitacoes-api.onrender.com/',
 });
 
 // 1. Interceptor de Pedido: Adiciona o token Bearer em todos os requests enviados à API
@@ -56,5 +56,10 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const getPncpBids = async (params) => {
+  const response = await api.get('/api/pncp/search', { params });
+  return response.data;
+};
 
 export default api;
