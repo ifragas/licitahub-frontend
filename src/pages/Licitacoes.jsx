@@ -7,6 +7,33 @@ import {
   ArrowUpDown, Check
 } from 'lucide-react';
 
+const normalizeStatus = (status) => {
+  if (status === 'Vencida') return 'Vencedora';
+  return status || 'Em Análise';
+};
+
+const getStatusClasses = (status) => {
+  const normalizedStatus = normalizeStatus(status);
+
+  switch (normalizedStatus) {
+    case 'Vencedora':
+    case 'Concluída':
+      return 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+
+    case 'Aprovada':
+      return 'bg-blue-50 text-blue-600 border border-blue-100';
+
+    case 'Perdida':
+      return 'bg-purple-50 text-purple-700 border border-purple-200';
+
+    case 'Rejeitada':
+      return 'bg-red-50 text-red-600 border border-red-100';
+
+    default:
+      return 'bg-amber-50 text-amber-600 border border-amber-100';
+  }
+};
+
 export default function Licitacoes() {
   const [licitacoes, setLicitacoes] = useState([]);
   const [companies, setCompanies] = useState([]);
@@ -42,7 +69,7 @@ export default function Licitacoes() {
   const fetchLicitacoes = async () => {
     try {
       const response = await api.get('/api/bids');
-      setLicitacoes(response.data);
+      setLicitacoes(Array.isArray(response.data) ? response.data : []);
       setError('');
     } catch (err) {
       console.error('Erro ao carregar licitações:', err);
@@ -55,7 +82,7 @@ export default function Licitacoes() {
   const fetchCompanies = async () => {
     try {
       const response = await api.get('/companies');
-      setCompanies(response.data);
+      setCompanies(Array.isArray(response.data) ? response.data : []);
     } catch (err) {
       console.error('Erro ao carregar empresas:', err);
     }
@@ -87,9 +114,7 @@ export default function Licitacoes() {
     setIsModalOpen(true);
   };
 
-  // Converte uma data ISO para o formato local exigido por datetime-local.
-  // Não utiliza toISOString() nesta etapa, pois isso converteria novamente
-  // o horário para UTC antes de preencher o campo.
+  // Converte uma data ISO para o formato local de datetime-local.
   const formatDateTimeLocal = (dateValue) => {
     if (!dateValue) return '';
 
@@ -112,11 +137,12 @@ export default function Licitacoes() {
     setOrgan(item.organ || '');
     setEstimatedValue(item.estimatedValue ?? '');
     setCompanyId(item.company?._id || item.company || '');
-    setStatus(item.status || 'Em Análise');
+
+    // Converte o status antigo para o nome atual no formulário.
+    setStatus(normalizeStatus(item.status));
+
     setEditalUrl(item.editalUrl || '');
-
     setOpeningDate(formatDateTimeLocal(item.openingDate));
-
     setNotes(item.notes || '');
     setError('');
     setIsModalOpen(true);
@@ -128,9 +154,7 @@ export default function Licitacoes() {
     setError('');
 
     try {
-      // datetime-local fornece uma data/hora sem indicação de fuso.
-      // O navegador interpreta o valor como horário local e toISOString()
-      // converte o instante correspondente para UTC.
+      // Converte o horário local informado no formulário para ISO.
       const openingDateISO = openingDate
         ? new Date(openingDate).toISOString()
         : null;
@@ -178,6 +202,11 @@ export default function Licitacoes() {
         ? itemOrId._id
         : itemOrId;
 
+      if (!id) {
+        alert('Não foi possível identificar a licitação.');
+        return;
+      }
+
       let removeSchedule = false;
 
       if (item && item.status === 'Aprovada' && newStatus !== 'Aprovada') {
@@ -196,7 +225,10 @@ export default function Licitacoes() {
       await fetchLicitacoes();
     } catch (err) {
       console.error('Erro ao atualizar estado:', err);
-      alert('Erro ao alterar o estado da licitação.');
+      alert(
+        err.response?.data?.error ||
+        'Erro ao alterar o estado da licitação.'
+      );
     }
   };
 
@@ -234,9 +266,7 @@ export default function Licitacoes() {
       const matchesOrgan =
         !selectedOrgan || item.organ === selectedOrgan;
 
-      const itemStatus =
-        item.status === 'Vencida' ? 'Vencedora' : item.status;
-
+      const itemStatus = normalizeStatus(item.status);
       const matchesStatus =
         !selectedStatus || itemStatus === selectedStatus;
 
@@ -364,7 +394,9 @@ export default function Licitacoes() {
               <option value="Em Análise">Em Análise</option>
               <option value="Aprovada">Aprovada</option>
               <option value="Vencedora">Vencedora</option>
+              <option value="Perdida">Perdida</option>
               <option value="Rejeitada">Rejeitada</option>
+              <option value="Concluída">Concluída</option>
             </select>
           </div>
 
@@ -411,126 +443,122 @@ export default function Licitacoes() {
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredLicitacoes.map((item) => (
-            <div
-              key={item._id}
-              className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
-            >
-              <div>
-                <div className="flex items-center justify-between gap-2 mb-3">
-                  <span
-                    className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit ${
-                      item.status === 'Vencedora' || item.status === 'Vencida'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : item.status === 'Aprovada'
-                        ? 'bg-blue-50 text-blue-600 border border-blue-100'
-                        : item.status === 'Rejeitada'
-                        ? 'bg-red-50 text-red-600 border border-red-100'
-                        : 'bg-amber-50 text-amber-600 border border-amber-100'
-                    }`}
-                  >
-                    {(item.status === 'Vencedora' || item.status === 'Vencida') && (
-                      <Trophy size={13} className="text-emerald-600" />
-                    )}
-                    {item.status === 'Vencida'
-                      ? 'Vencedora'
-                      : item.status || 'Em Análise'}
-                  </span>
+          {filteredLicitacoes.map((item) => {
+            const normalizedStatus = normalizeStatus(item.status);
+            const isWinner = normalizedStatus === 'Vencedora';
+            const isApproved = item.status === 'Aprovada';
 
-                  <div className="flex items-center gap-1">
-                    {item.status !== 'Aprovada' &&
-                      item.status !== 'Vencedora' &&
-                      item.status !== 'Vencida' && (
+            return (
+              <div
+                key={item._id}
+                className="bg-white p-6 rounded-2xl border border-slate-200/80 shadow-sm hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div>
+                  <div className="flex items-center justify-between gap-2 mb-3">
+                    <span
+                      className={`text-xs font-semibold px-2.5 py-1 rounded-full flex items-center gap-1 w-fit ${getStatusClasses(item.status)}`}
+                    >
+                      {isWinner && (
+                        <Trophy size={13} className="text-emerald-600" />
+                      )}
+                      {normalizedStatus}
+                    </span>
+
+                    <div className="flex items-center gap-1">
+                      {!isApproved &&
+                        !isWinner &&
+                        normalizedStatus !== 'Concluída' && (
+                          <button
+                            onClick={() => handleUpdateStatus(item, 'Aprovada')}
+                            className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
+                            title="Aprovar Licitação"
+                          >
+                            <CheckCircle size={16} />
+                          </button>
+                        )}
+
+                      {isApproved && (
                         <button
-                          onClick={() => handleUpdateStatus(item, 'Aprovada')}
-                          className="p-1.5 text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 rounded-lg transition-all cursor-pointer"
-                          title="Aprovar Licitação"
+                          onClick={() => handleUpdateStatus(item, 'Em Análise')}
+                          className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
+                          title="Reverter para Em Análise"
                         >
-                          <CheckCircle size={16} />
+                          <Clock size={16} />
                         </button>
                       )}
 
-                    {item.status === 'Aprovada' && (
                       <button
-                        onClick={() => handleUpdateStatus(item, 'Em Análise')}
-                        className="p-1.5 text-slate-400 hover:text-amber-600 hover:bg-amber-50 rounded-lg transition-all cursor-pointer"
-                        title="Reverter para Em Análise"
+                        onClick={() => handleOpenEditModal(item)}
+                        className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
+                        title="Editar Licitação"
                       >
-                        <Clock size={16} />
+                        <Pencil size={16} />
                       </button>
-                    )}
 
-                    <button
-                      onClick={() => handleOpenEditModal(item)}
-                      className="p-1.5 text-slate-400 hover:text-blue-600 hover:bg-blue-50 rounded-lg transition-all cursor-pointer"
-                      title="Editar Licitação"
-                    >
-                      <Pencil size={16} />
-                    </button>
-
-                    <button
-                      onClick={() => handleDeleteBid(item._id)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
-                      title="Eliminar Licitação"
-                    >
-                      <Trash2 size={16} />
-                    </button>
+                      <button
+                        onClick={() => handleDeleteBid(item._id)}
+                        className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-all cursor-pointer"
+                        title="Eliminar Licitação"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
                   </div>
+
+                  <h3 className="font-semibold text-slate-800 text-base line-clamp-2 mb-2">
+                    {item.title}
+                  </h3>
+
+                  <p className="text-sm text-slate-600 flex items-center gap-1.5 mb-2 font-medium">
+                    <Building2 size={16} className="text-blue-600 shrink-0" />
+                    <span className="truncate">
+                      {item.company?.companyName ||
+                        item.company?.name ||
+                        'Cliente não atribuído'}
+                    </span>
+                  </p>
+
+                  <p className="text-xs text-slate-500 mb-4 truncate">
+                    <span className="font-semibold text-slate-700">Órgão:</span>{' '}
+                    {item.organ}
+                  </p>
+
+                  {item.editalUrl && (
+                    <a
+                      href={
+                        item.editalUrl.startsWith('http')
+                          ? item.editalUrl
+                          : `https://${item.editalUrl}`
+                      }
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium mb-4"
+                    >
+                      Aceder ao Edital <ExternalLink size={12} />
+                    </a>
+                  )}
                 </div>
 
-                <h3 className="font-semibold text-slate-800 text-base line-clamp-2 mb-2">
-                  {item.title}
-                </h3>
-
-                <p className="text-sm text-slate-600 flex items-center gap-1.5 mb-2 font-medium">
-                  <Building2 size={16} className="text-blue-600 shrink-0" />
-                  <span className="truncate">
-                    {item.company?.companyName ||
-                      item.company?.name ||
-                      'Cliente não atribuído'}
+                <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
+                  <span className="flex items-center gap-1">
+                    <Calendar size={14} />
+                    {item.openingDate
+                      ? new Date(item.openingDate).toLocaleDateString('pt-BR')
+                      : 'A definir'}
                   </span>
-                </p>
 
-                <p className="text-xs text-slate-500 mb-4 truncate">
-                  <span className="font-semibold text-slate-700">Órgão:</span>{' '}
-                  {item.organ}
-                </p>
-
-                {item.editalUrl && (
-                  <a
-                    href={
-                      item.editalUrl.startsWith('http')
-                        ? item.editalUrl
-                        : `https://${item.editalUrl}`
-                    }
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-xs text-blue-600 hover:underline flex items-center gap-1 font-medium mb-4"
-                  >
-                    Aceder ao Edital <ExternalLink size={12} />
-                  </a>
-                )}
+                  <span className="font-bold text-emerald-600">
+                    {item.estimatedValue
+                      ? Number(item.estimatedValue).toLocaleString('pt-BR', {
+                          style: 'currency',
+                          currency: 'BRL'
+                        })
+                      : 'R$ 0,00'}
+                  </span>
+                </div>
               </div>
-
-              <div className="pt-4 border-t border-slate-100 flex items-center justify-between text-xs text-slate-500">
-                <span className="flex items-center gap-1">
-                  <Calendar size={14} />
-                  {item.openingDate
-                    ? new Date(item.openingDate).toLocaleDateString('pt-BR')
-                    : 'A definir'}
-                </span>
-
-                <span className="font-bold text-emerald-600">
-                  {item.estimatedValue
-                    ? Number(item.estimatedValue).toLocaleString('pt-BR', {
-                        style: 'currency',
-                        currency: 'BRL'
-                      })
-                    : 'R$ 0,00'}
-                </span>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -620,7 +648,7 @@ export default function Licitacoes() {
 
                 <div>
                   <label className="block text-xs font-semibold text-slate-600 uppercase mb-1">
-                    Estado de Análise
+                    Estado da Licitação
                   </label>
                   <select
                     value={status}
@@ -629,8 +657,10 @@ export default function Licitacoes() {
                   >
                     <option value="Em Análise">Em Análise</option>
                     <option value="Aprovada">Aprovada</option>
-                    <option value="Vencida">Vencedora 🏆</option>
+                    <option value="Vencedora">Vencedora 🏆</option>
+                    <option value="Perdida">Perdida</option>
                     <option value="Rejeitada">Rejeitada</option>
+                    <option value="Concluída">Concluída</option>
                   </select>
                 </div>
               </div>
